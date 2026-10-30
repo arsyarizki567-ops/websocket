@@ -1,15 +1,15 @@
-# fly.toml app configuration file generated for websocket-brt8jg on 2026-10-30T22:58:40Z
+# fly.toml app configuration file generated for scripterz on 2026-10-30T23:15:50Z
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
 
-app = 'websocket-brt8jg'
+app = 'scripterz'
 primary_region = 'sin'
 
 [build]
 
 [http_service]
-  internal_port = 3000
+  internal_port = 2997
   force_https = true
   auto_stop_machines = 'stop'
   auto_start_machines = true

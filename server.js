@@ -4,6 +4,17 @@ const http = require("http");
 const PORT = process.env.PORT || 3000;
 const MXS_KEY = process.env.MXS_KEY || "MXS-DEFAULT-KEY-CHANGE-THIS";
 
+// Dedupe cache: key = "jobId:name" → timestamp last broadcast
+// Kalau jobId+name sama dalam DEDUPE_TTL detik, skip broadcast
+const DEDUPE_TTL = 60 * 1000; // 60 detik
+const dedupeCache = new Map();
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, t] of dedupeCache) {
+    if (now - t > DEDUPE_TTL) dedupeCache.delete(k);
+  }
+}, 30000);
+
 const server = http.createServer((req, res) => {
   // Health check
   if (req.method === "GET" && req.url === "/") {
@@ -24,6 +35,16 @@ const server = http.createServer((req, res) => {
       let payload;
       try { payload = JSON.parse(body); } catch { res.writeHead(400); res.end("Bad JSON"); return; }
 
+      // Dedupe: skip kalau jobId sama dalam 60 detik (1 server = 1 broadcast per TTL)
+      const dedupeKey = payload.jobId || `noJob:${Date.now()}`;
+      const now = Date.now();
+      if (payload.jobId && dedupeCache.has(dedupeKey) && now - dedupeCache.get(dedupeKey) < DEDUPE_TTL) {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: true, broadcast: 0, deduped: true }));
+        return;
+      }
+      if (payload.jobId) dedupeCache.set(dedupeKey, now);
+
       // Broadcast ke semua WS client yang pake key sama
       const msg = JSON.stringify(payload);
       let sent = 0;
@@ -34,7 +55,8 @@ const server = http.createServer((req, res) => {
         }
       });
 
-      console.log(`[FIND] ${payload.name || "?"} owner=${payload.owner || "?"} job=${(payload.jobId||"").slice(0,8)}... broadcast=${sent}`);
+      const topBR = Array.isArray(payload.brainrots) && payload.brainrots[0] ? payload.brainrots[0].name : (payload.name || "?");
+      console.log(`[FIND] ${topBR} owner=${payload.owner || "?"} job=${(payload.jobId||"").slice(0,8)}... brs=${Array.isArray(payload.brainrots)?payload.brainrots.length:1} broadcast=${sent}`);
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ ok: true, broadcast: sent }));
     });

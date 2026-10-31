@@ -68,6 +68,9 @@ const server = http.createServer((req, res) => {
 
 const wss = new WebSocket.Server({ server });
 
+// Presence store: simpan presence tiap client supaya bisa dikirim ke yang baru join
+const presenceStore = new Map(); // key = ws → presence JSON string
+
 wss.on("connection", (ws, req) => {
   const urlKey = new URL("http://x" + req.url).searchParams.get("key");
   if (urlKey !== MXS_KEY) {
@@ -77,11 +80,24 @@ wss.on("connection", (ws, req) => {
   ws.authed = true;
   console.log(`[WS] Client connected. Total: ${[...wss.clients].filter(c=>c.authed).length}`);
 
+  // Kirim semua presence yang sudah ada ke client baru
+  for (const [, presenceMsg] of presenceStore) {
+    try { ws.send(presenceMsg); } catch {}
+  }
+
   ws.on("message", (raw) => {
-    // Relay presence / mxs_user messages ke semua client lain
     let data;
     try { data = JSON.parse(raw.toString()); } catch { return; }
-    if (data.type === "mxs_user" || data.type === "hello") {
+    if (data.type === "mxs_user") {
+      // Simpan presence terbaru dari client ini
+      presenceStore.set(ws, raw.toString());
+      // Relay ke semua client lain
+      wss.clients.forEach(client => {
+        if (client !== ws && client.readyState === WebSocket.OPEN && client.authed) {
+          client.send(raw.toString());
+        }
+      });
+    } else if (data.type === "hello") {
       wss.clients.forEach(client => {
         if (client !== ws && client.readyState === WebSocket.OPEN && client.authed) {
           client.send(raw.toString());
@@ -91,6 +107,7 @@ wss.on("connection", (ws, req) => {
   });
 
   ws.on("close", () => {
+    presenceStore.delete(ws);
     console.log(`[WS] Client disconnected. Total: ${[...wss.clients].filter(c=>c.authed && c.readyState===WebSocket.OPEN).length}`);
   });
 

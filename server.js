@@ -4,16 +4,16 @@ const http = require("http");
 const PORT = process.env.PORT || 3000;
 const MXS_KEY = process.env.MXS_KEY || "MXS-DEFAULT-KEY-CHANGE-THIS";
 
-// Dedupe cache: key = "jobId:name" → timestamp last broadcast
-// Kalau jobId+name sama dalam DEDUPE_TTL detik, skip broadcast
-const DEDUPE_TTL = 60 * 1000; // 60 detik
+// Dedupe ringan: cegah double-send dari scanner yang sama dalam 3 detik
+// (scanner 0.1s loop, jadi cukup 3 detik TTL)
+const DEDUPE_TTL = 3 * 1000;
 const dedupeCache = new Map();
 setInterval(() => {
   const now = Date.now();
   for (const [k, t] of dedupeCache) {
     if (now - t > DEDUPE_TTL) dedupeCache.delete(k);
   }
-}, 30000);
+}, 5000);
 
 const server = http.createServer((req, res) => {
   // Health check
